@@ -1,0 +1,55 @@
+name: Test PR Body Overflow
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-overflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Simulate Long PR Body
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Fetch the current PR
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            const body = pullRequest.body || '';
+            const maxBodyLength = 300; // Use a smaller limit for testing
+            const overflowMessage = "\n\n**This part is added as a comment due to PR body truncation.**";
+
+            if (body.length > maxBodyLength) {
+              // Truncate the body and update the PR
+              const truncatedBody = body.substring(0, maxBodyLength) + overflowMessage;
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: prNumber,
+                body: truncatedBody,
+              });
+
+              // Add the overflow as a comment
+              const overflowContent = body.substring(maxBodyLength);
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: `**PR Body Overflow:**\n\n${overflowContent}`,
+              });
+            } else {
+              console.log("PR body length is within limits. No action needed.");
+            }
